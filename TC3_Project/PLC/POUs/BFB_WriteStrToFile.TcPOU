@@ -1,0 +1,177 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
+  <POU Name="BFB_WriteStrToFile" Id="{1c089ee7-977c-4237-bf69-496032cb1c8e}" SpecialFunc="None">
+    <Declaration><![CDATA[(*-----------------------------------------版本信息-----------------------------------------
+第一版本：		V1.0.0
+功能说明：		写入Wstring数据到文本文档中
+开发者：		 Long.Yun
+开发时间：		2021.08.30
+引用库:			StringUtils、Sysfile、Systype
+
+变更版本：
+版本			变更者		变更时间		变更说明
+------------------------------------------------------------------------------------------*)
+FUNCTION_BLOCK BFB_WriteStrToFile
+VAR_INPUT
+	//文件路径
+	sFile				:STRING := 'C:\TwinCAT\BeckhoffBox\TestStrNotepad.txt';
+	//触发实现数据写入功能
+	bWrite				:BOOL;
+	//是否启动追加数据功能
+	bAppend				:BOOL;
+	//需要写入的数据
+	aStr				:ARRAY[0..19] OF STRING;	
+END_VAR
+
+VAR_OUTPUT
+	//写入完成
+	bDone				:BOOL;
+	//功能块工作中
+	bBusy				:BOOL;
+	//功能块报错
+	bError				:BOOL;
+	//功能块错误ID,0打开文件报错、1读取文件大小报错、2格式写入报错、3数据写入报错、4关闭文件报错
+	iErrorID			:INT;	
+END_VAR
+
+VAR
+	Trig_Write			:R_TRIG;
+	Trig_FWrite			:F_TRIG;
+	fbGetLocalTime		:FB_LocalSystemTime;
+	
+	iStep				:INT;
+	hFileHandle			:RTS_IEC_HANDLE;
+	iResult				:ARRAY[0..9] OF RTS_IEC_RESULT;
+	xwFileSize			:__XWORD;
+	LocalTime			:TIMESTRUCT;
+	sDate				:STRING;
+	sTime				:STRING;
+	RN					:STRING := '$R$N';
+	TAB					:STRING := '    ';
+	COLON				:STRING := ':';
+	i					:INT;
+END_VAR]]></Declaration>
+    <Implementation>
+      <ST><![CDATA[Trig_Write(CLK:=bWrite);
+Trig_FWrite(CLK:=bWrite);
+fbGetLocalTime(bEnable:=TRUE);
+
+IF Trig_FWrite.Q THEN
+	IF iStep <> 0 THEN
+		iStep := 1000;
+	END_IF
+ELSIF Trig_Write.Q THEN
+	iStep := 20;
+END_IF
+
+CASE iStep OF
+	0:
+		;
+		
+	//打开文档
+	20:
+		IF bAppend THEN
+			hFileHandle := SysFileOpen(szFile := sFile, am := SysFile.ACCESS_MODE.AM_APPEND_PLUS, pResult := ADR(iResult[0]));
+		ELSE
+			hFileHandle := SysFileOpen(szFile := sFile, am := SysFile.ACCESS_MODE.AM_WRITE, pResult := ADR(iResult[0]));
+		END_IF
+		iStep := 40;
+		
+	//检查文档大小与格式写入
+	//此处限制文档大小不超过5M，超过则覆写
+	40:
+		IF hFileHandle <> RTS_INVALID_HANDLE THEN
+			xwFileSize := SysFile.SysFileGetSizeByHandle(hFile := hFileHandle, pResult := ADR(iResult[1]));
+			IF xwFileSize = 0 THEN
+				ACT_Format();
+			ELSIF xwFileSize > 0 AND xwFileSize < 5*1024*1024 THEN
+				SysFileWrite(hFile:= hFileHandle, pbyBuffer:= ADR(RN), ulSize:= INT_TO_LWORD(LEN(RN)), pResult:= ADR(iResult[2]));
+				ACT_Format();
+			ELSE
+				SysFile.SysFileClose(hFile := hFileHandle);
+				hFileHandle := SysFileOpen(szFile:= sFile, am:= SysFile.ACCESS_MODE.AM_WRITE, pResult:= ADR(iResult[0]));
+				ACT_Format();				
+			END_IF
+			iStep := 60;
+		END_IF
+	
+	//内容写入	
+	60:
+	FOR i:=0 TO 19 BY 1 DO
+		IF aStr[i] <> '' THEN
+			SysFileWrite(hFile:= hFileHandle, pbyBuffer:= ADR(RN), ulSize:= INT_TO_LWORD(LEN(RN)), pResult:= ADR(iResult[2]));
+			SysFileWrite(hFile:= hFileHandle, pbyBuffer:= ADR(aStr[i]), ulSize:= INT_TO_LWORD(LEN(aStr[i])), pResult:= ADR(iResult[3]));
+		END_IF
+	END_FOR	
+	iResult[4] := SysFile.SysFileClose(hFile := hFileHandle);	
+	iStep := 80;
+	
+	//写入完成，等待复位后下次触发
+	80:
+		IF (iResult[0] OR iResult[1] OR iResult[2] OR iResult[3] OR iResult[4]) = 0 THEN
+			bDone := TRUE;
+		ELSE
+			bError := TRUE;
+			bDone := FALSE;
+			iStep := 100;		
+		END_IF
+	
+	//报警信息获取
+	100:
+		FOR i:=0 TO 4 BY 1 DO
+			IF iResult[i]<>0 THEN 
+				iErrorID := 1000+i;
+				EXIT;
+			END_IF
+		END_FOR
+		
+	//异常情况处理	
+	1000:
+		iStep := 0;
+		SysFile.SysFileClose(hFile := hFileHandle);
+		FB_Init(bInitRetains := TRUE, bInCopyCode := TRUE);
+END_CASE
+
+	//状态监控
+	bBusy := iStep <> 0;
+]]></ST>
+    </Implementation>
+    <Action Name="ACT_Format" Id="{8009c897-dad7-40d9-be15-dab568b91234}">
+      <Implementation>
+        <ST><![CDATA[//文档写入时间信息
+sDate := CONCAT(TO_STRING(fbGetLocalTime.systemTime.wYear), 
+		 CONCAT('-', 
+		 CONCAT(TO_STRING(fbGetLocalTime.systemTime.wMonth), 
+		 CONCAT('-', TO_STRING(fbGetLocalTime.systemTime.wDay)))));
+		 
+sTime := CONCAT(TO_STRING(fbGetLocalTime.systemTime.wHour), 
+		 CONCAT(':', 
+		 concat(TO_STRING(fbGetLocalTime.systemTime.wMinute), 
+		 CONCAT(':', TO_STRING(fbGetLocalTime.systemTime.wSecond)))));
+		 
+SysFileWrite(hFile:= hFileHandle, pbyBuffer:= ADR(sDate), ulSize:= INT_TO_LWORD(LEN(sDate)), pResult:= ADR(iResult[2]));
+SysFileWrite(hFile:= hFileHandle, pbyBuffer:= ADR(TAB),   ulSize:= INT_TO_LWORD(LEN(TAB)),   pResult:= ADR(iResult[2]));
+SysFileWrite(hFile:= hFileHandle, pbyBuffer:= ADR(sTime), ulSize:= INT_TO_LWORD(LEN(sTime)), pResult:= ADR(iResult[2]));
+SysFileWrite(hFile:= hFileHandle, pbyBuffer:= ADR(COLON), ulSize:= INT_TO_LWORD(LEN(COLON)), pResult:= ADR(iResult[2]));]]></ST>
+      </Implementation>
+    </Action>
+    <LineIds Name="BFB_WriteStrToFile">
+      <LineId Id="190" Count="0" />
+      <LineId Id="273" Count="0" />
+      <LineId Id="191" Count="45" />
+      <LineId Id="238" Count="33" />
+      <LineId Id="9" Count="0" />
+    </LineIds>
+    <LineIds Name="BFB_WriteStrToFile.ACT_Format">
+      <LineId Id="21" Count="0" />
+      <LineId Id="8" Count="0" />
+      <LineId Id="12" Count="2" />
+      <LineId Id="18" Count="0" />
+      <LineId Id="7" Count="0" />
+      <LineId Id="15" Count="2" />
+      <LineId Id="20" Count="0" />
+      <LineId Id="2" Count="2" />
+      <LineId Id="1" Count="0" />
+    </LineIds>
+  </POU>
+</TcPlcObject>
