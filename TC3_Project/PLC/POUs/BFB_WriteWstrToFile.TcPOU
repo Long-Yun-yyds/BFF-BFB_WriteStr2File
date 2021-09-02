@@ -2,7 +2,7 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
   <POU Name="BFB_WriteWstrToFile" Id="{cd57e6c9-6f7f-4785-bd33-435ab4db1ef8}" SpecialFunc="None">
     <Declaration><![CDATA[(*-----------------------------------------版本信息-----------------------------------------
-第一版本：		V1.0.0
+第一版本：		V1.0.1
 功能说明：		写入Wstring数据到文本文档中
 开发者：		 Long.Yun
 开发时间：		2021.08.30
@@ -10,7 +10,9 @@
 
 变更版本：
 版本			变更者		变更时间		变更说明
+1.0.1           Long.Yun    21.09.02        隐藏内部变量
 ------------------------------------------------------------------------------------------*)
+{attribute 'hide_all_locals'}
 FUNCTION_BLOCK BFB_WriteWstrToFile
 VAR_INPUT
 	//文件路径

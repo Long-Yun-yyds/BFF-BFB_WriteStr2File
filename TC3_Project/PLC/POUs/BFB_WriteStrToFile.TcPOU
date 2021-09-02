@@ -2,7 +2,7 @@
 <TcPlcObject Version="1.1.0.1" ProductVersion="3.1.4024.9">
   <POU Name="BFB_WriteStrToFile" Id="{1c089ee7-977c-4237-bf69-496032cb1c8e}" SpecialFunc="None">
     <Declaration><![CDATA[(*-----------------------------------------版本信息-----------------------------------------
-第一版本：		V1.0.0
+第一版本：		V1.0.1
 功能说明：		写入Wstring数据到文本文档中
 开发者：		 Long.Yun
 开发时间：		2021.08.30
@@ -10,7 +10,9 @@
 
 变更版本：
 版本			变更者		变更时间		变更说明
+1.0.1           Long.Yun    21.09.02        隐藏内部变量
 ------------------------------------------------------------------------------------------*)
+{attribute 'hide_all_locals'}
 FUNCTION_BLOCK BFB_WriteStrToFile
 VAR_INPUT
 	//文件路径
@@ -138,7 +140,7 @@ END_CASE
     </Implementation>
     <Action Name="ACT_Format" Id="{8009c897-dad7-40d9-be15-dab568b91234}">
       <Implementation>
-        <ST><![CDATA[//文档写入时间信息
+        <ST><![CDATA[(*文档写入时间信息*)
 sDate := CONCAT(TO_STRING(fbGetLocalTime.systemTime.wYear), 
 		 CONCAT('-', 
 		 CONCAT(TO_STRING(fbGetLocalTime.systemTime.wMonth), 
@@ -163,7 +165,7 @@ SysFileWrite(hFile:= hFileHandle, pbyBuffer:= ADR(COLON), ulSize:= INT_TO_LWORD(
       <LineId Id="9" Count="0" />
     </LineIds>
     <LineIds Name="BFB_WriteStrToFile.ACT_Format">
-      <LineId Id="21" Count="0" />
+      <LineId Id="22" Count="0" />
       <LineId Id="8" Count="0" />
       <LineId Id="12" Count="2" />
       <LineId Id="18" Count="0" />
